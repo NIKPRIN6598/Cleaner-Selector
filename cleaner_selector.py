@@ -43,9 +43,9 @@ if "filters" not in st.session_state:
         "condition": [],
         "etching_rate": [],
         "contains_surfactants": [],
-        "concentration": (df["Conc."].min(), df["Conc."].max()),
-        "temp_min": (df["Temp min"].min(), df["Temp min"].max()),
-        "temp_max": (df["Temp max"].min(), df["Temp max"].max()),
+        "concentration": (int(df["Conc."].min()), int(df["Conc."].max())),
+        "temp_min": (int(df["Temp min"].min()), int(df["Temp min"].max())),
+        "temp_max": (int(df["Temp max"].min()), int(df["Temp max"].max())),
     }
 
 # Sidebar filters - CLEAR BUTTON AT THE TOP
@@ -59,9 +59,9 @@ if st.sidebar.button("Clear Filters"):
         "condition": [],
         "etching_rate": [],
         "contains_surfactants": [],
-        "concentration": (df["Conc."].min(), df["Conc."].max()),
-        "temp_min": (df["Temp min"].min(), df["Temp min"].max()),
-        "temp_max": (df["Temp max"].min(), df["Temp max"].max()),
+        "concentration": (int(df["Conc."].min()), int(df["Conc."].max())),
+        "temp_min": (int(df["Temp min"].min()), int(df["Temp min"].max())),
+        "temp_max": (int(df["Temp max"].min()), int(df["Temp max"].max())),
     }
     st.rerun()
 
@@ -79,11 +79,13 @@ multiselect_fields = [
 for field, label, column in multiselect_fields:
     selected_options = st.sidebar.multiselect(
         label,
-        options=df[column].dropna().unique(),
+        options=df[column].unique(),
         default=st.session_state.filters[field],
         key=f"multiselect_{field}",
     )
-    st.session_state.filters[field] = selected_options
+    if selected_options != st.session_state.filters[field]:
+        st.session_state.filters[field] = selected_options
+        st.rerun()
 
 # Slider widgets
 st.session_state.filters["concentration"] = st.sidebar.slider(
@@ -105,13 +107,15 @@ st.session_state.filters["temp_max"] = st.sidebar.slider(
     value=st.session_state.filters["temp_max"],
 )
 
-# Apply filtering criteria
+# Filtering logic
 filtered_df = df.copy()
 
+# Apply multiselect filters
 for field, _, column in multiselect_fields:
     if st.session_state.filters[field]:
         filtered_df = filtered_df[filtered_df[column].isin(st.session_state.filters[field])]
 
+# Apply slider filters
 filtered_df = filtered_df[
     (filtered_df["Conc."] >= st.session_state.filters["concentration"][0]) &
     (filtered_df["Conc."] <= st.session_state.filters["concentration"][1])
@@ -128,40 +132,36 @@ filtered_df = filtered_df[
 # Reset index to start from 1
 filtered_df.index = range(1, len(filtered_df) + 1)
 
-# Display filtered results
-if not filtered_df.empty:
-    st.dataframe(filtered_df, use_container_width=True, height=700)
+# Display all cleaners or filtered results
+if filtered_df.empty:
+    st.write("No results found based on the selected filters.")
 else:
-    st.write("No results found for the selected criteria.")
+    st.dataframe(filtered_df, use_container_width=True, height=700)
 
 # Export buttons
 if not filtered_df.empty:
     st.markdown("**Download Results**")
     csv = filtered_df.to_csv(index=False).encode("utf-8")
     st.download_button(label="Download as CSV", data=csv, file_name="filtered_results.csv", mime="text/csv")
-
-    # Generate table image
-    fig, ax = plt.subplots(figsize=(14, 8))
-    ax.axis("tight")
-    ax.axis("off")
-    table = ax.table(
-        cellText=filtered_df.values,
-        colLabels=filtered_df.columns,
-        cellLoc="center",
-        loc="center",
-        colWidths=[0.2] + [0.1] * (len(filtered_df.columns) - 1)
-    )
-    table.auto_set_font_size(False)
-    table.set_fontsize(12)
-
-    for (row, col), cell in table.get_celld().items():
-        if row > 0:
-            cell.set_height(0.05)
-    for (row, col), cell in table.get_celld().items():
-        if row == 0:
-            cell.set_height(0.08)
-
-    plt.savefig("filtered_results.png", dpi=300, bbox_inches='tight')
-
-    with open("filtered_results.png", "rb") as img_file:
-        st.download_button(label="Download as Image", data=img_file, file_name="filtered_results.png", mime="image/png")
+    if not filtered_df.empty:
+        fig, ax = plt.subplots(figsize=(14, 8))
+        ax.axis("tight")
+        ax.axis("off")
+        table = ax.table(
+            cellText=filtered_df.values,
+            colLabels=filtered_df.columns,
+            cellLoc="center",
+            loc="center",
+            colWidths=[0.2] + [0.1] * (len(filtered_df.columns) - 1)
+        )
+        table.auto_set_font_size(False)
+        table.set_fontsize(12)
+        for (row, col), cell in table.get_celld().items():
+            if row > 0:
+                cell.set_height(0.05)
+        for (row, col), cell in table.get_celld().items():
+            if row == 0:
+                cell.set_height(0.08)
+        plt.savefig("filtered_results.png", dpi=300, bbox_inches='tight')
+        with open("filtered_results.png", "rb") as img_file:
+            st.download_button(label="Download as Image", data=img_file, file_name="filtered_results.png", mime="image/png")
